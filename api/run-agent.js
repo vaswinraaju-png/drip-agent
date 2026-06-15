@@ -52,20 +52,23 @@ export default async function handler(req, res) {
         messages: [
           {
             role: "user",
-            content: `From these search results for "${niche}", extract up to 3 real businesses.
-            
+            content: `Extract up to 3 real businesses from these search results for "${niche}".
+
 ${searchSummary}
 
-Return ONLY a JSON array, no markdown, no explanation:
-[
-  {"business_name": "...", "url": "...", "contact_email": "...or null if not visible in snippet"},
-  ...
-]
+YOU MUST respond with ONLY a raw JSON array. No markdown. No backticks. No explanation. Start your response with [ and end with ].
+
+Example of correct format:
+[{"business_name":"Acme Coaching","url":"https://acmecoaching.com","contact_email":null}]
 
 Rules:
-- Only include actual businesses, not directories or aggregator sites (no justdial, sulekha, indiamart)
-- Extract email from snippet if visible, otherwise null
-- URL must be their actual website, not a listing page`,
+- Skip directories like justdial, sulekha, indiamart, shiksha, collegedunia
+- Extract email from snippet only if clearly visible, else use null
+- URL must be the business website itself`,
+          },
+          {
+            role: "assistant",
+            content: "[",
           },
         ],
       }),
@@ -75,15 +78,28 @@ Rules:
     const textBlock = parseData.content?.find((b) => b.type === "text");
 
     if (!textBlock?.text) {
-      return res.status(500).json({ success: false, error: "Could not parse search results" });
+      return res.status(500).json({ success: false, error: "Claude returned no text block" });
     }
 
     let prospects = [];
     try {
-      const clean = textBlock.text.replace(/```json|```/g, "").trim();
+      // Pre-fill the [ we used as assistant primer
+      const raw = "[" + textBlock.text;
+      const clean = raw.replace(/```json|```/g, "").trim();
       prospects = JSON.parse(clean);
     } catch {
-      return res.status(500).json({ success: false, error: "JSON parse failed on prospects" });
+      // Fallback: try to extract JSON array from anywhere in the response
+      try {
+        const raw = "[" + textBlock.text;
+        const match = raw.match(/\[[\s\S]*\]/);
+        if (match) prospects = JSON.parse(match[0]);
+      } catch {
+        return res.status(500).json({ 
+          success: false, 
+          error: "JSON parse failed",
+          debug: textBlock.text.slice(0, 200)
+        });
+      }
     }
 
     if (!prospects.length) {
