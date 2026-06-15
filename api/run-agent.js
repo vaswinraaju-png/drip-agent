@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { niche, claudeKey, firecrawlKey, serperKey } = req.body;
+  const { niche, serperKey } = req.body;
   if (!serperKey) return res.status(400).json({ success: false, error: "Serper API key missing." });
 
   const SKIP_DOMAINS = [
@@ -13,25 +13,24 @@ export default async function handler(req, res) {
     "wikipedia","facebook","linkedin","instagram","youtube","twitter",
     "quora","reddit","glassdoor","ambitionbox","naukri","indeed",
     "softwareadvice","capterra","g2.com","getapp","techradar",
-    "mailchimp","hubspot","klaviyo","blog","medium","substack"
+    "mailchimp","hubspot","klaviyo","medium","substack"
   ];
 
   const SKIP_TITLE_KEYWORDS = [
     "template","guide","how to","tips","best practices","software",
-    "tool","platform","saas","top 10","list of","email marketing guide",
-    "boost","raise revenue","management software"
+    "tool","platform","saas","top 10","list of","email marketing",
+    "boost","raise revenue","management software","automation tool"
   ];
 
-  // Niche-specific search queries that find ACTUAL businesses
   const NICHE_QUERY_MAP = {
     "fitness studio gym India member retention email":
-      '"gym" OR "fitness studio" India "contact us" "email" -software -blog -template',
+      'gym fitness studio Bangalore OR Mumbai OR Delhi "contact" "email" -software -blog -template',
     "D2C brand India email marketing":
-      'D2C brand India "contact@" OR "hello@" OR "info@" site:.in -blog -template',
+      'D2C brand India "contact@" OR "hello@" OR "info@" -blog -template',
     "EdTech coaching institute India lead nurturing":
-      'coaching institute India "enquire now" "contact" email -justdial -sulekha',
+      'coaching institute India "enquire now" "contact" email -justdial -sulekha -shiksha',
     "immigration consultancy India WhatsApp automation":
-      'immigration consultancy India "contact us" "email" -justdial -blog',
+      'immigration consultancy India "contact us" "email" -justdial -blog -sulekha',
     "real estate developer India CRM follow-up":
       'real estate developer India "contact" "email us" -99acres -magicbricks -housing',
     "healthcare clinic India patient follow-up automation":
@@ -41,7 +40,6 @@ export default async function handler(req, res) {
   const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 
   try {
-    // ── Step 1: Search with niche-specific query ───────────────
     const query = NICHE_QUERY_MAP[niche] || `${niche} India "contact us" email -blog -template`;
 
     const searchRes = await fetch("https://google.serper.dev/search", {
@@ -57,78 +55,38 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: false, error: "No search results from Serper" });
     }
 
-    // ── Step 2: Filter to real business pages only ─────────────
-    const filtered = results.filter((r) => {
-      const url = (r.link || "").toLowerCase();
-      const title = (r.title || "").toLowerCase();
-      const skipDomain = SKIP_DOMAINS.some((d) => url.includes(d));
-      const skipTitle = SKIP_TITLE_KEYWORDS.some((k) => title.includes(k));
-      return !skipDomain && !skipTitle;
-    }).slice(0, 5);
-
-    if (!filtered.length) {
-      return res.status(200).json({ success: false, error: "All results filtered out — try a different niche" });
-    }
-
-    // ── Step 3: Scrape contact page for each prospect ──────────
-    const enriched = await Promise.all(
-      filtered.map(async (r) => {
-        const baseUrl = r.link || "";
-        const businessName = r.title?.replace(/\s*[-|].*$/, "").trim() || "Unknown";
-
-        // Try scraping /contact page first, then homepage
-        const urlsToTry = [
-          baseUrl.replace(/\/$/, "") + "/contact",
-          baseUrl.replace(/\/$/, "") + "/contact-us",
-          baseUrl,
-        ];
-
-        let email = null;
-        let websiteContent = null;
-
-        // Check snippet first
-        const snippetEmails = (r.snippet || "").match(EMAIL_REGEX);
-        if (snippetEmails) email = snippetEmails[0];
-
-        // Scrape if no email found yet
-        if (!email && firecrawlKey) {
-          for (const url of urlsToTry) {
-            try {
-              const scrapeRes = await fetch("https://api.firecrawl.dev/v1/scrape", {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${firecrawlKey}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ url, formats: ["markdown"] }),
-              });
-              const scrapeData = await scrapeRes.json();
-              const content = scrapeData?.data?.markdown?.slice(0, 2000) || null;
-              if (content) {
-                websiteContent = content;
-                const emails = content.match(EMAIL_REGEX);
-                // Filter out noreply, support@, privacy@ etc
-                const validEmail = emails?.find(e =>
-                  !e.includes("noreply") && !e.includes("privacy") &&
-                  !e.includes("legal") && !e.includes("unsubscribe")
-                );
-                if (validEmail) { email = validEmail; break; }
-              }
-            } catch { continue; }
-          }
-        }
+    // Filter and extract prospects purely from Serper data — no scraping here
+    const prospects = results
+      .filter((r) => {
+        const url = (r.link || "").toLowerCase();
+        const title = (r.title || "").toLowerCase();
+        return (
+          !SKIP_DOMAINS.some((d) => url.includes(d)) &&
+          !SKIP_TITLE_KEYWORDS.some((k) => title.includes(k))
+        );
+      })
+      .slice(0, 4)
+      .map((r) => {
+        const allText = `${r.snippet || ""} ${r.title || ""}`;
+        const emails = allText.match(EMAIL_REGEX);
+        const validEmail = emails?.find(
+          (e) => !e.includes("noreply") && !e.includes("privacy") && !e.includes("unsubscribe")
+        ) || null;
 
         return {
-          business_name: businessName,
-          url: baseUrl,
-          contact_email: email,
+          business_name: r.title?.replace(/\s*[-|].*$/, "").trim() || "Unknown",
+          url: r.link || null,
+          contact_email: validEmail,
+          snippet: r.snippet || "",
           niche,
-          websiteContent: websiteContent?.slice(0, 1500) || null,
         };
-      })
-    );
+      });
 
-    return res.status(200).json({ success: true, prospects: enriched });
+    if (!prospects.length) {
+      return res.status(200).json({ success: false, error: "No valid prospects after filtering" });
+    }
+
+    return res.status(200).json({ success: true, prospects });
 
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
