@@ -5,8 +5,39 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { provider, apiKey, prospect, websiteContent } = req.body;
+  const { provider, apiKey, prospect, firecrawlKey } = req.body;
 
+  // ── Step 1: Scrape website for context (single call, fast) ──
+  let websiteContext = prospect.snippet || "";
+  let scrapedEmail = prospect.contact_email || null;
+
+  if (firecrawlKey && prospect.url) {
+    try {
+      const scrapeRes = await fetch("https://api.firecrawl.dev/v1/scrape", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${firecrawlKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url: prospect.url, formats: ["markdown"] }),
+      });
+      const scrapeData = await scrapeRes.json();
+      const content = scrapeData?.data?.markdown?.slice(0, 1500) || "";
+      if (content) {
+        websiteContext = content;
+        // Extract email from scraped content if not already found
+        if (!scrapedEmail) {
+          const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+          const emails = content.match(EMAIL_REGEX);
+          scrapedEmail = emails?.find(
+            (e) => !e.includes("noreply") && !e.includes("privacy") && !e.includes("unsubscribe")
+          ) || null;
+        }
+      }
+    } catch { /* use snippet as fallback */ }
+  }
+
+  // ── Step 2: Generate personalised email ─────────────────────
   const prompt = `You are Aswin Raaju, a performance marketing consultant from Bangalore.
 
 You've built a WhatsApp + Email drip automation tool (Railway + Node.js + Supabase).
@@ -14,18 +45,19 @@ It auto-follows up with leads via WhatsApp and email on a schedule. Fully custom
 
 Write a cold email to this business:
 Business: ${prospect.business_name}
-Website context: ${websiteContent || "No website content available"}
+Website/context: ${websiteContext || "No context available"}
 Niche: ${prospect.niche}
 
 Rules:
 - Subject must reference something specific about their business
 - Max 120 words body
 - Sound human, not salesy
+- Mention the pain: leads going cold, manual follow-up, missing conversions
 - End with CTA: self-host for $19 OR done-for-you setup for $99
 - Book a call: https://cal.com/aswinraaju
 - Sign off as Aswin Raaju
 
-Return ONLY valid JSON (no markdown):
+Return ONLY valid JSON (no markdown, no backticks):
 {"subject": "...", "body": "..."}`;
 
   try {
@@ -74,9 +106,17 @@ Return ONLY valid JSON (no markdown):
       text = d.candidates?.[0]?.content?.parts?.[0]?.text || "";
     }
 
+    if (!text) return res.status(500).json({ success: false, error: "AI returned empty response" });
+
     const clean = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(clean);
-    return res.status(200).json({ success: true, email: parsed });
+
+    return res.status(200).json({
+      success: true,
+      email: parsed,
+      contact_email: scrapedEmail, // return scraped email if found
+    });
+
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
