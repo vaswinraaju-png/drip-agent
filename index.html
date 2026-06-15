@@ -258,6 +258,10 @@
         <label>FIRECRAWL API KEY</label>
         <input type="password" id="firecrawlKey" placeholder="fc-..." oninput="saveSettings()"/>
       </div>
+      <div class="field">
+        <label>SERPER API KEY <span style="color:var(--muted);font-size:10px">(free at serper.dev — used to find prospects)</span></label>
+        <input type="password" id="serperKey" placeholder="..." oninput="saveSettings()"/>
+      </div>
     </div>
 
     <div class="card">
@@ -341,6 +345,7 @@ function saveSettings() {
     openaiKey: document.getElementById("openaiKey").value,
     geminiKey: document.getElementById("geminiKey").value,
     firecrawlKey: document.getElementById("firecrawlKey").value,
+    serperKey: document.getElementById("serperKey").value,
     gmailUser: document.getElementById("gmailUser").value,
     gmailPass: document.getElementById("gmailPass").value,
     supabaseUrl: document.getElementById("supabaseUrl").value,
@@ -367,6 +372,7 @@ function loadSettings() {
   if (s.openaiKey) document.getElementById("openaiKey").value = s.openaiKey;
   if (s.geminiKey) document.getElementById("geminiKey").value = s.geminiKey;
   if (s.firecrawlKey) document.getElementById("firecrawlKey").value = s.firecrawlKey;
+  if (s.serperKey) document.getElementById("serperKey").value = s.serperKey;
   if (s.gmailUser) document.getElementById("gmailUser").value = s.gmailUser;
   if (s.gmailPass) document.getElementById("gmailPass").value = s.gmailPass;
   if (s.supabaseUrl) document.getElementById("supabaseUrl").value = s.supabaseUrl;
@@ -498,7 +504,7 @@ async function runAgent() {
     const agentRes = await fetch(`${base}/api/run-agent`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ niche: selectedNiche, claudeKey: s.claudeKey || apiKey, firecrawlKey: s.firecrawlKey }),
+      body: JSON.stringify({ niche: selectedNiche, claudeKey: s.claudeKey || apiKey, firecrawlKey: s.firecrawlKey, serperKey: s.serperKey }),
     });
     const agentData = await agentRes.json();
 
