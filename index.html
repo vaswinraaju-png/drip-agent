@@ -537,7 +537,7 @@ async function runAgent() {
       const genRes = await fetch(`${base}/api/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: selectedProvider, apiKey, prospect, websiteContent: prospect.websiteContent }),
+        body: JSON.stringify({ provider: selectedProvider, apiKey, prospect, firecrawlKey: s.firecrawlKey }),
       });
       const genData = await genRes.json();
 
@@ -545,6 +545,17 @@ async function runAgent() {
         addLog(`Email generation failed for ${prospect.business_name}`, "error");
         addProspect({ ...prospect, status: "failed", time: new Date().toISOString() });
         incStat("failed");
+        continue;
+      }
+
+      // Use email found during scraping if prospect didn't have one from Serper
+      if (!prospect.contact_email && genData.contact_email) {
+        prospect.contact_email = genData.contact_email;
+      }
+
+      if (!prospect.contact_email) {
+        addLog(`No email found for ${prospect.business_name} after scraping — skipping`, "warn");
+        addProspect({ ...prospect, status: "no_email", time: new Date().toISOString() });
         continue;
       }
 
