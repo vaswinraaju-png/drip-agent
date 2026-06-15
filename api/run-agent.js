@@ -9,6 +9,11 @@ export default async function handler(req, res) {
 
   if (!serperKey) return res.status(400).json({ success: false, error: "Serper API key missing. Add it in Settings." });
 
+  // Domains to skip — aggregators, not real businesses
+  const SKIP_DOMAINS = ["justdial", "sulekha", "indiamart", "shiksha", "collegedunia",
+    "wikipedia", "facebook", "linkedin", "instagram", "youtube", "twitter",
+    "quora", "reddit", "glassdoor", "ambitionbox", "naukri", "indeed"];
+
   try {
     // ── Step 1: Search via Serper ──────────────────────────────
     const searchRes = await fetch("https://google.serper.dev/search", {
@@ -18,7 +23,7 @@ export default async function handler(req, res) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        q: `${niche} contact email India`,
+        q: `${niche} official website contact`,
         num: 10,
         gl: "in",
         hl: "en",
@@ -29,87 +34,37 @@ export default async function handler(req, res) {
     const results = searchData.organic || [];
 
     if (!results.length) {
-      return res.status(200).json({ success: false, error: "No search results from Serper" });
+      return res.status(200).json({ success: false, error: "No search results returned from Serper" });
     }
 
-    // ── Step 2: Extract prospects from search results ──────────
-    // Use Claude to parse the search results into structured prospects
-    const searchSummary = results
-      .slice(0, 8)
-      .map((r, i) => `${i + 1}. Title: ${r.title}\n   URL: ${r.link}\n   Snippet: ${r.snippet}`)
-      .join("\n\n");
+    // ── Step 2: Parse prospects directly from Serper results ───
+    const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 
-    const parseRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": claudeKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1000,
-        messages: [
-          {
-            role: "user",
-            content: `Extract up to 3 real businesses from these search results for "${niche}".
-
-${searchSummary}
-
-YOU MUST respond with ONLY a raw JSON array. No markdown. No backticks. No explanation. Start your response with [ and end with ].
-
-Example of correct format:
-[{"business_name":"Acme Coaching","url":"https://acmecoaching.com","contact_email":null}]
-
-Rules:
-- Skip directories like justdial, sulekha, indiamart, shiksha, collegedunia
-- Extract email from snippet only if clearly visible, else use null
-- URL must be the business website itself`,
-          },
-          {
-            role: "assistant",
-            content: "[",
-          },
-        ],
-      }),
-    });
-
-    const parseData = await parseRes.json();
-    const textBlock = parseData.content?.find((b) => b.type === "text");
-
-    if (!textBlock?.text) {
-      return res.status(500).json({ success: false, error: "Claude returned no text block" });
-    }
-
-    let prospects = [];
-    try {
-      // Pre-fill the [ we used as assistant primer
-      const raw = "[" + textBlock.text;
-      const clean = raw.replace(/```json|```/g, "").trim();
-      prospects = JSON.parse(clean);
-    } catch {
-      // Fallback: try to extract JSON array from anywhere in the response
-      try {
-        const raw = "[" + textBlock.text;
-        const match = raw.match(/\[[\s\S]*\]/);
-        if (match) prospects = JSON.parse(match[0]);
-      } catch {
-        return res.status(500).json({ 
-          success: false, 
-          error: "JSON parse failed",
-          debug: textBlock.text.slice(0, 200)
-        });
-      }
-    }
+    const prospects = results
+      .filter((r) => {
+        const url = (r.link || "").toLowerCase();
+        return !SKIP_DOMAINS.some((d) => url.includes(d));
+      })
+      .slice(0, 4)
+      .map((r) => {
+        const emailMatch = (r.snippet || "").match(EMAIL_REGEX);
+        return {
+          business_name: r.title?.replace(/\s*[-|].*$/, "").trim() || "Unknown",
+          url: r.link || null,
+          contact_email: emailMatch ? emailMatch[0] : null,
+          niche,
+          websiteContent: null,
+        };
+      });
 
     if (!prospects.length) {
-      return res.status(200).json({ success: false, error: "No valid prospects extracted" });
+      return res.status(200).json({ success: false, error: "No valid prospects after filtering aggregator sites" });
     }
 
     // ── Step 3: Scrape each prospect via Firecrawl ─────────────
     const enriched = await Promise.all(
       prospects.map(async (p) => {
-        if (!p.url) return { ...p, niche, websiteContent: null };
+        if (!p.url) return p;
         try {
           const scrapeRes = await fetch("https://api.firecrawl.dev/v1/scrape", {
             method: "POST",
@@ -122,21 +77,22 @@ Rules:
           const scrapeData = await scrapeRes.json();
           const content = scrapeData?.data?.markdown?.slice(0, 1500) || null;
 
-          // Try to extract email from scraped content if not found earlier
+          // Try to extract email from scraped content if not found in snippet
           let email = p.contact_email;
           if (!email && content) {
-            const emailMatch = content.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+            const emailMatch = content.match(EMAIL_REGEX);
             if (emailMatch) email = emailMatch[0];
           }
 
-          return { ...p, niche, contact_email: email, websiteContent: content };
+          return { ...p, contact_email: email, websiteContent: content };
         } catch {
-          return { ...p, niche, websiteContent: null };
+          return p;
         }
       })
     );
 
     return res.status(200).json({ success: true, prospects: enriched });
+
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
