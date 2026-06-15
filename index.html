@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Drip Agent — by storiesbyachu</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --border: #1e1e2e;
+    --accent: #7c3aed;
+    --accent-light: #a855f7;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #eab308;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    --font: 'Inter', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+  /* Layout */
+  .app { display: flex; flex-direction: column; min-height: 100vh; max-width: 900px; margin: 0 auto; padding: 0 16px; }
+
+  /* Header */
+  header { padding: 24px 0 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-family: var(--font-mono); font-size: 13px; color: var(--accent-light); letter-spacing: 0.05em; }
+  .logo span { color: var(--muted); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* Nav */
+  nav { display: flex; gap: 4px; padding: 16px 0; border-bottom: 1px solid var(--border); }
+  .nav-btn { background: none; border: none; color: var(--muted); font-family: var(--font-mono); font-size: 12px; padding: 6px 14px; border-radius: 6px; cursor: pointer; letter-spacing: 0.05em; transition: all 0.15s; }
+  .nav-btn:hover { color: var(--text); background: var(--border); }
+  .nav-btn.active { color: var(--accent-light); background: rgba(124,58,237,0.15); }
+
+  /* Screens */
+  .screen { display: none; padding: 24px 0; }
+  .screen.active { display: block; }
+
+  /* Section title */
+  .section-title { font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 12px; }
+
+  /* Form */
+  .field { margin-bottom: 16px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-family: var(--font-mono); }
+  input, select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px 12px; border-radius: 7px; font-family: var(--font-mono); font-size: 13px; outline: none; transition: border-color 0.15s; }
+  input:focus, select:focus { border-color: var(--accent); }
+  select option { background: var(--bg); }
+
+  /* Provider pills */
+  .provider-group { display: flex; gap: 8px; flex-wrap: wrap; }
+  .provider-pill { background: var(--bg); border: 1px solid var(--border); color: var(--muted); padding: 8px 16px; border-radius: 20px; font-size: 12px; font-family: var(--font-mono); cursor: pointer; transition: all 0.15s; }
+  .provider-pill:hover { border-color: var(--accent); color: var(--text); }
+  .provider-pill.active { border-color: var(--accent-light); color: var(--accent-light); background: rgba(124,58,237,0.1); }
+
+  /* Buttons */
+  .btn { border: none; border-radius: 8px; padding: 12px 24px; font-size: 13px; font-family: var(--font-mono); cursor: pointer; transition: all 0.15s; letter-spacing: 0.03em; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent-light); }
+  .btn-primary:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+  .btn-ghost { background: none; border: 1px solid var(--border); color: var(--muted); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--text); }
+  .btn-sm { padding: 6px 12px; font-size: 11px; }
+
+  /* Niche grid */
+  .niche-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-bottom: 20px; }
+  .niche-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.15s; }
+  .niche-card:hover { border-color: var(--accent); }
+  .niche-card.active { border-color: var(--accent-light); background: rgba(124,58,237,0.08); }
+  .niche-card .niche-icon { font-size: 20px; margin-bottom: 6px; }
+  .niche-card .niche-name { font-size: 12px; color: var(--text); font-weight: 500; }
+  .niche-card .niche-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* Run button area */
+  .run-area { display: flex; align-items: center; gap: 16px; margin-top: 20px; }
+  .run-status { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+  /* Log feed */
+  .log-feed { background: #050508; border: 1px solid var(--border); border-radius: 10px; padding: 16px; height: 320px; overflow-y: auto; font-family: var(--font-mono); font-size: 12px; line-height: 1.7; }
+  .log-feed::-webkit-scrollbar { width: 4px; }
+  .log-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .log-line { display: flex; gap: 10px; align-items: flex-start; }
+  .log-time { color: var(--muted); min-width: 60px; }
+  .log-icon { min-width: 16px; }
+  .log-text { color: var(--text); }
+  .log-line.info .log-text { color: var(--text); }
+  .log-line.success .log-text { color: var(--green); }
+  .log-line.warn .log-text { color: var(--yellow); }
+  .log-line.error .log-text { color: var(--red); }
+  .log-line.accent .log-text { color: var(--accent-light); }
+  .log-empty { color: var(--muted); text-align: center; padding: 40px 0; }
+
+  /* Prospects table */
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: var(--surface); color: var(--muted); font-family: var(--font-mono); font-size: 11px; font-weight: 500; text-align: left; padding: 12px 16px; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
+  td { padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-family: var(--font-mono); }
+  .badge-sent { background: rgba(34,197,94,0.15); color: var(--green); }
+  .badge-failed { background: rgba(239,68,68,0.15); color: var(--red); }
+  .badge-pending { background: rgba(234,179,8,0.15); color: var(--yellow); }
+  .badge-noemail { background: rgba(100,116,139,0.15); color: var(--muted); }
+  .empty-table { text-align: center; padding: 60px; color: var(--muted); font-family: var(--font-mono); font-size: 13px; }
+
+  /* Stats row */
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
+  .stat-num { font-size: 28px; font-weight: 700; font-family: var(--font-mono); color: var(--accent-light); }
+  .stat-label { font-size: 11px; color: var(--muted); margin-top: 4px; letter-spacing: 0.05em; }
+
+  /* Save indicator */
+  .save-indicator { font-size: 11px; color: var(--green); font-family: var(--font-mono); margin-top: 8px; opacity: 0; transition: opacity 0.3s; }
+  .save-indicator.show { opacity: 1; }
+
+  /* Mobile */
+  @media (max-width: 600px) {
+    .stats-row { grid-template-columns: repeat(3,1fr); }
+    .niche-grid { grid-template-columns: 1fr 1fr; }
+    .stat-num { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">drip<span>.</span>agent <span>// by storiesbyachu</span></div>
+    <div class="status-dot" id="statusDot"></div>
+  </header>
+
+  <nav>
+    <button class="nav-btn active" onclick="showScreen('run')">▶ RUN</button>
+    <button class="nav-btn" onclick="showScreen('logs')">◈ LOGS</button>
+    <button class="nav-btn" onclick="showScreen('prospects')">◎ PROSPECTS</button>
+    <button class="nav-btn" onclick="showScreen('settings')">⚙ SETTINGS</button>
+  </nav>
+
+  <!-- RUN SCREEN -->
+  <div id="screen-run" class="screen active">
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-num" id="statSent">0</div><div class="stat-label">EMAILS SENT</div></div>
+      <div class="stat-card"><div class="stat-num" id="statFound">0</div><div class="stat-label">PROSPECTS FOUND</div></div>
+      <div class="stat-card"><div class="stat-num" id="statFailed">0</div><div class="stat-label">FAILED</div></div>
+    </div>
+
+    <div class="section-title">Select Target Niche</div>
+    <div class="niche-grid" id="nicheGrid">
+      <div class="niche-card active" data-niche="D2C brand India email marketing" onclick="selectNiche(this)">
+        <div class="niche-icon">🛍️</div>
+        <div class="niche-name">D2C Brands</div>
+        <div class="niche-desc">Meta ads, dead leads</div>
+      </div>
+      <div class="niche-card" data-niche="EdTech coaching institute India lead nurturing" onclick="selectNiche(this)">
+        <div class="niche-icon">📚</div>
+        <div class="niche-name">EdTech / Coaching</div>
+        <div class="niche-desc">500–5000 leads/month</div>
+      </div>
+      <div class="niche-card" data-niche="immigration consultancy India WhatsApp automation" onclick="selectNiche(this)">
+        <div class="niche-icon">✈️</div>
+        <div class="niche-name">Immigration</div>
+        <div class="niche-desc">WhatsApp-heavy funnels</div>
+      </div>
+      <div class="niche-card" data-niche="real estate developer India CRM follow-up" onclick="selectNiche(this)">
+        <div class="niche-icon">🏢</div>
+        <div class="niche-name">Real Estate</div>
+        <div class="niche-desc">Large lead databases</div>
+      </div>
+      <div class="niche-card" data-niche="fitness studio gym India member retention email" onclick="selectNiche(this)">
+        <div class="niche-icon">💪</div>
+        <div class="niche-name">Fitness / Gym</div>
+        <div class="niche-desc">Member retention</div>
+      </div>
+      <div class="niche-card" data-niche="healthcare clinic India patient follow-up automation" onclick="selectNiche(this)">
+        <div class="niche-icon">🏥</div>
+        <div class="niche-name">Healthcare</div>
+        <div class="niche-desc">Patient follow-up</div>
+      </div>
+    </div>
+
+    <div class="run-area">
+      <button class="btn btn-primary" id="runBtn" onclick="runAgent()">▶ RUN AGENT</button>
+      <button class="btn btn-ghost" id="stopBtn" onclick="stopAgent()" style="display:none">■ STOP</button>
+      <span class="run-status" id="runStatus">Ready</span>
+    </div>
+  </div>
+
+  <!-- LOGS SCREEN -->
+  <div id="screen-logs" class="screen">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div class="section-title" style="margin:0">Live Log Feed</div>
+      <button class="btn btn-ghost btn-sm" onclick="clearLogs()">Clear</button>
+    </div>
+    <div class="log-feed" id="logFeed">
+      <div class="log-empty">No logs yet. Run the agent to see activity.</div>
+    </div>
+  </div>
+
+  <!-- PROSPECTS SCREEN -->
+  <div id="screen-prospects" class="screen">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div class="section-title" style="margin:0">Prospects Log</div>
+      <button class="btn btn-ghost btn-sm" onclick="clearProspects()">Clear All</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>BUSINESS</th>
+            <th>EMAIL</th>
+            <th>NICHE</th>
+            <th>STATUS</th>
+            <th>TIME</th>
+          </tr>
+        </thead>
+        <tbody id="prospectsBody">
+          <tr><td colspan="5" class="empty-table">No prospects yet. Run the agent first.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SETTINGS SCREEN -->
+  <div id="screen-settings" class="screen">
+    <div class="card">
+      <div class="section-title">AI Provider</div>
+      <div class="provider-group" id="providerGroup">
+        <div class="provider-pill active" data-provider="claude" onclick="selectProvider(this)">Claude (Anthropic)</div>
+        <div class="provider-pill" data-provider="openai" onclick="selectProvider(this)">OpenAI GPT-4o</div>
+        <div class="provider-pill" data-provider="gemini" onclick="selectProvider(this)">Google Gemini</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">API Keys</div>
+      <div class="field" id="claudeKeyField">
+        <label>ANTHROPIC API KEY</label>
+        <input type="password" id="claudeKey" placeholder="sk-ant-..." oninput="saveSettings()"/>
+      </div>
+      <div class="field" id="openaiKeyField" style="display:none">
+        <label>OPENAI API KEY</label>
+        <input type="password" id="openaiKey" placeholder="sk-..." oninput="saveSettings()"/>
+      </div>
+      <div class="field" id="geminiKeyField" style="display:none">
+        <label>GEMINI API KEY</label>
+        <input type="password" id="geminiKey" placeholder="AIza..." oninput="saveSettings()"/>
+      </div>
+      <div class="field">
+        <label>FIRECRAWL API KEY</label>
+        <input type="password" id="firecrawlKey" placeholder="fc-..." oninput="saveSettings()"/>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Gmail</div>
+      <div class="field">
+        <label>GMAIL ADDRESS</label>
+        <input type="email" id="gmailUser" placeholder="you@gmail.com" oninput="saveSettings()"/>
+      </div>
+      <div class="field">
+        <label>GMAIL APP PASSWORD <span style="color:var(--muted);font-size:10px">(not your Gmail password — generate at myaccount.google.com/apppasswords)</span></label>
+        <input type="password" id="gmailPass" placeholder="xxxx xxxx xxxx xxxx" oninput="saveSettings()"/>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Supabase (Optional — for logging)</div>
+      <div class="field">
+        <label>SUPABASE URL</label>
+        <input type="text" id="supabaseUrl" placeholder="https://xxx.supabase.co" oninput="saveSettings()"/>
+      </div>
+      <div class="field">
+        <label>SUPABASE ANON KEY</label>
+        <input type="password" id="supabaseKey" placeholder="eyJ..." oninput="saveSettings()"/>
+      </div>
+    </div>
+
+    <div class="save-indicator" id="saveIndicator">✓ Saved to browser</div>
+  </div>
+
+</div>
+
+<script>
+// ─── State ──────────────────────────────────────────────────────
+let selectedNiche = "D2C brand India email marketing";
+let selectedProvider = "claude";
+let isRunning = false;
+let shouldStop = false;
+let prospects = JSON.parse(localStorage.getItem("drip_prospects") || "[]");
+let logs = JSON.parse(localStorage.getItem("drip_logs") || "[]");
+let stats = JSON.parse(localStorage.getItem("drip_stats") || '{"sent":0,"found":0,"failed":0}');
+
+// ─── Init ───────────────────────────────────────────────────────
+window.onload = () => {
+  loadSettings();
+  renderProspects();
+  renderLogs();
+  updateStats();
+};
+
+// ─── Navigation ─────────────────────────────────────────────────
+function showScreen(name) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById(`screen-${name}`).classList.add("active");
+  event.target.classList.add("active");
+}
+
+// ─── Niche selection ────────────────────────────────────────────
+function selectNiche(el) {
+  document.querySelectorAll(".niche-card").forEach(c => c.classList.remove("active"));
+  el.classList.add("active");
+  selectedNiche = el.dataset.niche;
+}
+
+// ─── Provider selection ─────────────────────────────────────────
+function selectProvider(el) {
+  document.querySelectorAll(".provider-pill").forEach(p => p.classList.remove("active"));
+  el.classList.add("active");
+  selectedProvider = el.dataset.provider;
+  document.getElementById("claudeKeyField").style.display = selectedProvider === "claude" ? "block" : "none";
+  document.getElementById("openaiKeyField").style.display = selectedProvider === "openai" ? "block" : "none";
+  document.getElementById("geminiKeyField").style.display = selectedProvider === "gemini" ? "block" : "none";
+  saveSettings();
+}
+
+// ─── Settings ───────────────────────────────────────────────────
+function saveSettings() {
+  const settings = {
+    provider: selectedProvider,
+    claudeKey: document.getElementById("claudeKey").value,
+    openaiKey: document.getElementById("openaiKey").value,
+    geminiKey: document.getElementById("geminiKey").value,
+    firecrawlKey: document.getElementById("firecrawlKey").value,
+    gmailUser: document.getElementById("gmailUser").value,
+    gmailPass: document.getElementById("gmailPass").value,
+    supabaseUrl: document.getElementById("supabaseUrl").value,
+    supabaseKey: document.getElementById("supabaseKey").value,
+  };
+  localStorage.setItem("drip_settings", JSON.stringify(settings));
+  const ind = document.getElementById("saveIndicator");
+  ind.classList.add("show");
+  setTimeout(() => ind.classList.remove("show"), 2000);
+}
+
+function loadSettings() {
+  const s = JSON.parse(localStorage.getItem("drip_settings") || "{}");
+  if (s.provider) {
+    selectedProvider = s.provider;
+    document.querySelectorAll(".provider-pill").forEach(p => {
+      p.classList.toggle("active", p.dataset.provider === selectedProvider);
+    });
+    document.getElementById("claudeKeyField").style.display = selectedProvider === "claude" ? "block" : "none";
+    document.getElementById("openaiKeyField").style.display = selectedProvider === "openai" ? "block" : "none";
+    document.getElementById("geminiKeyField").style.display = selectedProvider === "gemini" ? "block" : "none";
+  }
+  if (s.claudeKey) document.getElementById("claudeKey").value = s.claudeKey;
+  if (s.openaiKey) document.getElementById("openaiKey").value = s.openaiKey;
+  if (s.geminiKey) document.getElementById("geminiKey").value = s.geminiKey;
+  if (s.firecrawlKey) document.getElementById("firecrawlKey").value = s.firecrawlKey;
+  if (s.gmailUser) document.getElementById("gmailUser").value = s.gmailUser;
+  if (s.gmailPass) document.getElementById("gmailPass").value = s.gmailPass;
+  if (s.supabaseUrl) document.getElementById("supabaseUrl").value = s.supabaseUrl;
+  if (s.supabaseKey) document.getElementById("supabaseKey").value = s.supabaseKey;
+}
+
+function getSettings() {
+  return JSON.parse(localStorage.getItem("drip_settings") || "{}");
+}
+
+// ─── Logging ────────────────────────────────────────────────────
+function addLog(message, type = "info") {
+  const icons = { info: "›", success: "✓", warn: "⚠", error: "✗", accent: "◈" };
+  const time = new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const entry = { time, message, type };
+  logs.push(entry);
+  if (logs.length > 200) logs.shift();
+  localStorage.setItem("drip_logs", JSON.stringify(logs));
+
+  const feed = document.getElementById("logFeed");
+  const empties = feed.querySelectorAll(".log-empty");
+  empties.forEach(e => e.remove());
+
+  const line = document.createElement("div");
+  line.className = `log-line ${type}`;
+  line.innerHTML = `<span class="log-time">${time}</span><span class="log-icon">${icons[type]}</span><span class="log-text">${message}</span>`;
+  feed.appendChild(line);
+  feed.scrollTop = feed.scrollHeight;
+
+  document.getElementById("runStatus").textContent = message.slice(0, 50) + (message.length > 50 ? "…" : "");
+}
+
+function renderLogs() {
+  const feed = document.getElementById("logFeed");
+  if (logs.length === 0) { feed.innerHTML = '<div class="log-empty">No logs yet. Run the agent to see activity.</div>'; return; }
+  const icons = { info: "›", success: "✓", warn: "⚠", error: "✗", accent: "◈" };
+  feed.innerHTML = logs.map(l => `<div class="log-line ${l.type}"><span class="log-time">${l.time}</span><span class="log-icon">${icons[l.type]||"›"}</span><span class="log-text">${l.message}</span></div>`).join("");
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function clearLogs() {
+  logs = [];
+  localStorage.removeItem("drip_logs");
+  document.getElementById("logFeed").innerHTML = '<div class="log-empty">No logs yet. Run the agent to see activity.</div>';
+}
+
+// ─── Prospects ──────────────────────────────────────────────────
+function addProspect(p) {
+  prospects.push(p);
+  localStorage.setItem("drip_prospects", JSON.stringify(prospects));
+  renderProspects();
+}
+
+function renderProspects() {
+  const tbody = document.getElementById("prospectsBody");
+  if (prospects.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-table">No prospects yet. Run the agent first.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = [...prospects].reverse().map(p => {
+    const badgeClass = { sent: "badge-sent", failed: "badge-failed", no_email: "badge-noemail", pending: "badge-pending" }[p.status] || "badge-pending";
+    const time = p.time ? new Date(p.time).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "-";
+    return `<tr>
+      <td><div style="font-weight:500">${p.business_name || "—"}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${(p.url||"").slice(0,30)}${(p.url||"").length>30?"…":""}</div></td>
+      <td style="font-family:var(--font-mono);font-size:12px">${p.contact_email || "—"}</td>
+      <td style="font-size:12px;color:var(--muted)">${(p.niche||"").split(" ").slice(0,2).join(" ")}</td>
+      <td><span class="badge ${badgeClass}">${p.status}</span></td>
+      <td style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">${time}</td>
+    </tr>`;
+  }).join("");
+}
+
+function clearProspects() {
+  prospects = [];
+  localStorage.removeItem("drip_prospects");
+  renderProspects();
+}
+
+// ─── Stats ──────────────────────────────────────────────────────
+function updateStats() {
+  document.getElementById("statSent").textContent = stats.sent;
+  document.getElementById("statFound").textContent = stats.found;
+  document.getElementById("statFailed").textContent = stats.failed;
+}
+
+function incStat(key) {
+  stats[key]++;
+  localStorage.setItem("drip_stats", JSON.stringify(stats));
+  updateStats();
+}
+
+// ─── Validate settings ──────────────────────────────────────────
+function validateSettings() {
+  const s = getSettings();
+  const aiKey = s.claudeKey || s.openaiKey || s.geminiKey;
+  if (!aiKey) { alert("Please add your AI API key in Settings first."); showScreen("settings"); return false; }
+  if (!s.firecrawlKey) { alert("Please add your Firecrawl API key in Settings."); showScreen("settings"); return false; }
+  if (!s.gmailUser || !s.gmailPass) { alert("Please add your Gmail credentials in Settings."); showScreen("settings"); return false; }
+  return true;
+}
+
+// ─── Stop ───────────────────────────────────────────────────────
+function stopAgent() {
+  shouldStop = true;
+  addLog("Stop requested — finishing current prospect…", "warn");
+}
+
+// ─── MAIN AGENT RUN ─────────────────────────────────────────────
+async function runAgent() {
+  if (!validateSettings()) return;
+  if (isRunning) return;
+
+  isRunning = true;
+  shouldStop = false;
+  document.getElementById("runBtn").disabled = true;
+  document.getElementById("stopBtn").style.display = "inline-block";
+  document.getElementById("statusDot").style.background = "var(--accent-light)";
+  document.getElementById("statusDot").style.boxShadow = "0 0 8px var(--accent-light)";
+
+  const s = getSettings();
+  const apiKey = s[selectedProvider + "Key"] || s.claudeKey;
+  const base = window.location.origin;
+
+  addLog(`Agent starting — niche: ${selectedNiche.split(" ").slice(0,3).join(" ")}`, "accent");
+
+  try {
+    // Step 1: Find prospects
+    addLog("Searching for prospects via web search…", "info");
+    const agentRes = await fetch(`${base}/api/run-agent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ niche: selectedNiche, claudeKey: s.claudeKey || apiKey, firecrawlKey: s.firecrawlKey }),
+    });
+    const agentData = await agentRes.json();
+
+    if (!agentData.success) { addLog(`Failed to find prospects: ${agentData.error}`, "error"); throw new Error(agentData.error); }
+
+    const found = agentData.prospects || [];
+    stats.found += found.length;
+    localStorage.setItem("drip_stats", JSON.stringify(stats));
+    updateStats();
+    addLog(`Found ${found.length} prospects`, "success");
+
+    // Step 2: Process each
+    for (const prospect of found) {
+      if (shouldStop) { addLog("Agent stopped by user.", "warn"); break; }
+
+      addLog(`Processing: ${prospect.business_name}`, "info");
+
+      if (!prospect.contact_email) {
+        addLog(`No email found for ${prospect.business_name} — skipping`, "warn");
+        addProspect({ ...prospect, status: "no_email", time: new Date().toISOString() });
+        continue;
+      }
+
+      // Check for duplicate
+      const alreadySent = prospects.find(p => p.contact_email === prospect.contact_email && p.status === "sent");
+      if (alreadySent) { addLog(`Already contacted ${prospect.contact_email} — skipping`, "warn"); continue; }
+
+      // Generate email
+      addLog(`Generating personalised email for ${prospect.business_name}…`, "info");
+      const genRes = await fetch(`${base}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: selectedProvider, apiKey, prospect, websiteContent: prospect.websiteContent }),
+      });
+      const genData = await genRes.json();
+
+      if (!genData.success || !genData.email) {
+        addLog(`Email generation failed for ${prospect.business_name}`, "error");
+        addProspect({ ...prospect, status: "failed", time: new Date().toISOString() });
+        incStat("failed");
+        continue;
+      }
+
+      addLog(`Email ready: "${genData.email.subject}"`, "accent");
+
+      // Send email
+      addLog(`Sending to ${prospect.contact_email}…`, "info");
+      const sendRes = await fetch(`${base}/api/send-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gmailUser: s.gmailUser,
+          gmailPass: s.gmailPass,
+          supabaseUrl: s.supabaseUrl,
+          supabaseKey: s.supabaseKey,
+          prospect,
+          emailData: genData.email,
+        }),
+      });
+      const sendData = await sendRes.json();
+
+      if (sendData.success) {
+        addLog(`✓ Sent to ${prospect.contact_email}`, "success");
+        addProspect({ ...prospect, status: "sent", time: new Date().toISOString() });
+        incStat("sent");
+      } else {
+        addLog(`Send failed: ${sendData.error}`, "error");
+        addProspect({ ...prospect, status: "failed", time: new Date().toISOString() });
+        incStat("failed");
+      }
+
+      // Rate limit
+      if (!shouldStop) await new Promise(r => setTimeout(r, 8000));
+    }
+
+    addLog(`Agent finished — ${stats.sent} emails sent total`, "success");
+
+  } catch (err) {
+    addLog(`Agent error: ${err.message}`, "error");
+  } finally {
+    isRunning = false;
+    shouldStop = false;
+    document.getElementById("runBtn").disabled = false;
+    document.getElementById("stopBtn").style.display = "none";
+    document.getElementById("runStatus").textContent = "Ready";
+    document.getElementById("statusDot").style.background = "var(--green)";
+    document.getElementById("statusDot").style.boxShadow = "0 0 8px var(--green)";
+  }
+}
+</script>
+</body>
+</html>
